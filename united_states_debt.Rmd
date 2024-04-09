@@ -1,0 +1,32 @@
+---
+title: "United States Debt"
+author: "Benjamin Panny"
+date: "`r Sys.Date()`"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# install.packages(c("rvest", "dplyr"))
+library(rvest)
+library(tidyverse)
+url <- "https://www.thebalancemoney.com/national-debt-by-year-compared-to-gdp-and-major-events-3306287"
+webpage <- read_html(url)
+tables <- html_table(webpage)
+my_table <- tables[[1]] # Adjust the index [[1]] based on which table you need
+debt <- my_table %>%
+  mutate(`Debt (in billions, rounded)` = as.integer(str_replace_all(`Debt (in billions, rounded)`, c("\\$" = "", "," = ""))),
+         `Debt-to-GDP Ratio` = as.integer(str_replace_all(`Debt-to-GDP Ratio`, "%", "")))
+```
+
+```{r}
+debt %>%
+  ggplot(aes(x = `End of Fiscal Year`, y = `Debt (in billions, rounded)`, color = `Debt-to-GDP Ratio`)) +
+  geom_point() +
+  scale_color_gradient(low = "blue", high = "red") +
+  theme_minimal()
+```
+
