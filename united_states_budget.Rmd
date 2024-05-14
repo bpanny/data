@@ -1,0 +1,123 @@
+---
+title: "united_states_budget"
+author: "Benjamin Panny"
+date: "`r Sys.Date()`"
+output: github_document
+always_allow_html: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Let's look at [Table 4.1—Outlays by Agency: 1962–2029](https://www.whitehouse.gov/omb/budget/historical-tables/)
+
+```{r, message = F}
+library(httr)
+library(readxl)
+library(tidyverse)
+
+# URL of the Excel file
+url <- "https://www.whitehouse.gov/wp-content/uploads/2024/03/hist04z1_fy2025.xlsx"
+
+# Download file into memory
+response <- GET(url)
+
+# Create a temporary file
+temp_file <- tempfile(fileext = ".xlsx")
+
+# Write the content of the response to the temporary file
+writeBin(content(response, "raw"), temp_file)
+
+# Read the Excel file from the temporary file
+file <- read_excel(temp_file)
+
+# (Optional) Clean up by deleting the temporary file after use
+unlink(temp_file)
+
+file %>% head
+```
+
+
+```{r}
+library(tidyverse)
+file[1,] %>% t() %>% unique
+```
+
+Row 1 only mentions that values are given in millions of dollars, so it can be dropped. Also, "Department or Other Unit" is the true column label for the rest of what is in column 1, while the rest of row 2 is the year. I eventually want to plot by year and by department. So let's transform the dataframe to have a column for Department, a column for Year, and a column for Outlay
+
+```{r}
+data <- file[-1,] %>% 
+  rename(tmp_colname = `Table 4.1 - OUTLAYS BY AGENCY:  1962 - 2029`) %>% 
+  mutate(tmp_colname = ifelse(tmp_colname == "Department or other unit", "Year", tmp_colname)) %>% 
+  t() %>% 
+  as_tibble()
+
+clean_colnames <- unlist(data[1,])
+data <- data[-1,]
+colnames(data) <- clean_colnames
+dep_of_interest <- clean_colnames[1:34]
+
+data_long <- data %>% 
+  pivot_longer(cols = -Year,
+               names_to = "Department or Other Unit",
+               values_to = "Outlay") %>% 
+  # TQ stands for "Transition Quarter" and dirties my Year column type!
+  filter(Year != "TQ") %>% 
+  mutate(across(everything(), ~na_if(.,"..........")),
+         Year = str_replace(Year, " estimate", "") %>% as.integer(),
+         Outlay = as.numeric(Outlay)) %>% 
+  replace_na(list("Outlay" = 0)) %>% 
+  # I don't want to deal with negative outlays, so I'm removing them
+  mutate(Outlay = ifelse(Outlay < 0, NA, Outlay)) %>% 
+  filter(!is.na(Outlay), `Department or Other Unit` %in% dep_of_interest)
+
+data_long %>% 
+  filter(str_detect(`Department or Other Unit`, 'Department')) %>% 
+  ggplot(aes(x = Year, y = Outlay, fill = `Department or Other Unit`)) +
+  geom_area(stat = "identity", position = "fill") +
+  # for totals instead of proportions
+  # geom_area()
+  theme(legend.position = "top")
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(stringr)
+
+# Assuming data_long is already loaded and prepared
+data_long %>%
+  filter(str_detect(`Department or Other Unit`, 'Department')) %>%
+  ggplot(aes(x = Year, y = Outlay, fill = `Department or Other Unit`, text = `Department or Other Unit`)) +
+  geom_area() +
+  theme(legend.position = "none") -> p
+
+# Convert ggplot to plotly for interactivity
+interactive_plot <- ggplotly(p, tooltip = "text")
+
+# Display the plot
+interactive_plot
+```
+
+```{r}
+# # Library
+# library(streamgraph)
+# 
+# # Stream graph with a legend
+# pp <- streamgraph(data_long %>%
+#                     filter(str_detect(`Department or Other Unit`, 'Department')) %>% 
+#                     as.data.frame() %>% 
+#                     rename("key" = `Department or Other Unit`,
+#                            "value" = "Outlay",
+#                            "date" = "Year"), 
+#                  height="300px", width="1000px") %>%
+#   sg_legend(show=TRUE, label="names: ")
+# 
+# 
+# # save the widget
+# library(htmlwidgets)
+# saveWidget(pp, file=paste0( getwd(), "/streamgraphDropdown.html"))
+```
+

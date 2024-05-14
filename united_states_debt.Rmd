@@ -26,6 +26,8 @@ debt <- my_table %>%
 debt %>%
   ggplot(aes(x = `End of Fiscal Year`, y = `Debt (in billions, rounded)`, color = `Debt-to-GDP Ratio`)) +
   geom_point() +
+  # geom_text(data = filter(debt, `Major Events by Presidential Term` == "Recession"),
+  #           aes(label = `Major Events by Presidential Term`), angle = 45, vjust = -10) +
   scale_color_gradient(low = "blue", high = "red") +
   theme_minimal()
 ```
